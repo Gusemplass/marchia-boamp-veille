@@ -64,12 +64,14 @@ def daily_boamp_mail():
     analyses = []
     for offer in offers:
         analysis = analyze_offer_with_gpt(offer["summary"], KEYWORDS)
-       analyses.append(f"""Offre: {offer['title']}
+        analyses.append(
+            f"""Offre: {offer['title']}
 Lien: {offer['link']}
 Analyse:
 {analysis}
 
-""")
+"""
+        )
 
     mail_body = "\n".join(analyses) or "Aucune offre trouvée."
     send_email(
