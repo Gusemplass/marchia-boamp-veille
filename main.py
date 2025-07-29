@@ -57,19 +57,19 @@ def send_email(subject, body, to_email, from_email, app_password):
     server.login(from_email, app_password)
     server.send_message(msg)
     server.quit()
-
 def daily_boamp_mail():
     print("Début de la récupération et analyse BOAMP...")
     offers = fetch_boamp_rss()
     analyses = []
     for offer in offers:
         analysis = analyze_offer_with_gpt(offer["summary"], KEYWORDS)
-      analyses.append(
-    f"Offre: {offer['title']}\n"
-    f"Lien: {offer['link']}\n"
-    f"Date: {offer['published']}\n"
-    f"Résumé: {offer['summary']}"
-)
+        analyses.append(
+            f"Offre: {offer['title']}\n"
+            f"Lien: {offer['link']}\n"
+            f"Date: {offer['published']}\n"
+            f"Résumé: {offer['summary']}\n"
+            f"Analyse: {analysis}"
+        )
 Analyse:
 {analysis}
 
