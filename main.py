@@ -64,10 +64,12 @@ def daily_boamp_mail():
     analyses = []
     for offer in offers:
         analysis = analyze_offer_with_gpt(offer["summary"], KEYWORDS)
-       analyses.append(f"""Offre: {offer['title']}
-Lien: {offer['link']}
-Date: {offer['published']}
-Résumé: {offer['summary']}""")
+      analyses.append(
+    f"Offre: {offer['title']}\n"
+    f"Lien: {offer['link']}\n"
+    f"Date: {offer['published']}\n"
+    f"Résumé: {offer['summary']}"
+)
 Analyse:
 {analysis}
 
