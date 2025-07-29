@@ -3,4 +3,4 @@ openai
 schedule
 fastapi
 uvicorn
-smtplib  
+
