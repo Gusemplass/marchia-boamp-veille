@@ -77,3 +77,21 @@ if __name__ == "__main__":
     while True:
         schedule.run_pending()
         time.sleep(60)
+from fastapi import FastAPI
+import threading
+
+app = FastAPI()
+
+@app.get("/")
+def read_root():
+    return {"status": "MARCH.IA tourne en tâche de fond"}
+
+def run_scheduler():
+    print("Agent BOAMP veille démarré...")
+    schedule.every().day.at("07:00").do(daily_boamp_mail)
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+
+# Lancer le scheduler dans un thread séparé
+threading.Thread(target=run_scheduler, daemon=True).start()
