@@ -3,4 +3,4 @@ openai
 schedule
 fastapi
 uvicorn
-smtplib  # (inclus par défaut, pas besoin de l’ajouter à requirements)
+smtplib  
