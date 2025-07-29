@@ -95,3 +95,9 @@ def run_scheduler():
 
 # Lancer le scheduler dans un thread séparé
 threading.Thread(target=run_scheduler, daemon=True).start()
+import uvicorn
+
+if __name__ == "__main__":
+    print("Lancement serveur FastAPI + tâche BOAMP")
+    threading.Thread(target=run_scheduler, daemon=True).start()
+    uvicorn.run(app, host="0.0.0.0", port=10000)
