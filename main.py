@@ -46,17 +46,6 @@ def analyze_offer_with_gpt(offer_text, keywords):
     )
     return response.choices[0].message.content.strip()
 
-def send_email(subject, body, to_email, from_email, app_password):
-    msg = MIMEText(body, 'plain', 'utf-8')
-    msg['Subject'] = subject
-    msg['From'] = from_email
-    msg['To'] = to_email
-
-    server = smtplib.SMTP('smtp.gmail.com', 587)
-    server.starttls()
-    server.login(from_email, app_password)
-    server.send_message(msg)
-    server.quit()
 def daily_boamp_mail():
     print("Début de la récupération et analyse BOAMP...")
     offers = fetch_boamp_rss()
@@ -70,13 +59,8 @@ def daily_boamp_mail():
             f"Résumé: {offer['summary']}\n"
             f"Analyse: {analysis}"
         )
-Analyse:
-{analysis}
 
-"""
-        )
-
-    mail_body = "\n".join(analyses) or "Aucune offre trouvée."
+    mail_body = "\n\n".join(analyses) if analyses else "Aucune offre trouvée."
     send_email(
         subject="Rapport BOAMP quotidien",
         body=mail_body,
