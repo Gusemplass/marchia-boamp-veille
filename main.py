@@ -5,7 +5,11 @@ from email.mime.text import MIMEText
 import schedule
 import time
 import os
+from fastapi import FastAPI
+import threading
+import uvicorn
 
+# --- CONFIG ENVIRONNEMENT ---
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GMAIL_EMAIL = os.getenv("GMAIL_EMAIL")
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
@@ -15,6 +19,7 @@ openai.api_key = OPENAI_API_KEY
 
 KEYWORDS = ["menuiserie", "volet", "réhabilitation", "PVC"]
 
+# --- RÉCUPÉRATION DU FLUX BOAMP ---
 def fetch_boamp_rss():
     url = "https://www.boamp.fr/flux-rss"
     feed = feedparser.parse(url)
@@ -28,76 +33,89 @@ def fetch_boamp_rss():
         })
     return offers
 
+# --- ANALYSE GPT AVEC FORMAT JSON ---
 def analyze_offer_with_gpt(offer_text, keywords):
     prompt = f"""
-    Tu es un expert en appels d'offres menuiserie extérieure.
-    Analyse ce texte et dis-moi :
-    - Si l'offre concerne les mots clés suivants : {', '.join(keywords)}
-    - Résume les points importants.
-    Réponds clairement.
-    Texte :
-    {offer_text}
-    """
+Tu es un assistant expert en appels d'offres de menuiseries extérieures.
+
+Ta mission :
+1. Indique si OUI ou NON ce texte concerne un lot menuiseries extérieures (avec mots-clés : {', '.join(keywords)}).
+2. Si OUI, génère un petit JSON structuré avec les champs suivants :
+{{
+  "pertinent": true/false,
+  "chantier": "...",
+  "lot": "...",
+  "descriptif": "...",
+  "localisation": "...",
+  "date_limite": "si précisée"
+}}
+
+Voici le texte à analyser :
+{offer_text}
+"""
     response = openai.ChatCompletion.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.2,
-        max_tokens=500,
+        max_tokens=600,
     )
     return response.choices[0].message.content.strip()
 
+# --- ENVOI D’EMAIL HTML ---
+def send_email(subject, body, to_email, from_email, app_password):
+    msg = MIMEText(body, "html")
+    msg["Subject"] = subject
+    msg["From"] = from_email
+    msg["To"] = to_email
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(from_email, app_password)
+        server.sendmail(from_email, to_email, msg.as_string())
+
+# --- TÂCHE PRINCIPALE : VEILLE + MAIL ---
 def daily_boamp_mail():
-    print("Début de la récupération et analyse BOAMP...")
+    print("📡 Récupération du flux BOAMP...")
     offers = fetch_boamp_rss()
     analyses = []
+
     for offer in offers:
         analysis = analyze_offer_with_gpt(offer["summary"], KEYWORDS)
-        analyses.append(
-            f"Offre: {offer['title']}\n"
-            f"Lien: {offer['link']}\n"
-            f"Date: {offer['published']}\n"
-            f"Résumé: {offer['summary']}\n"
-            f"Analyse: {analysis}"
-        )
+        html_block = f"""
+        <h3>📌 {offer['title']}</h3>
+        <p><b>📅 Date :</b> {offer['published']}</p>
+        <p><b>🔗 Lien :</b> <a href="{offer['link']}">{offer['link']}</a></p>
+        <p><b>📝 Résumé :</b> {offer['summary']}</p>
+        <p><b>🧠 Analyse IA :</b><br><pre>{analysis}</pre></p>
+        <hr>
+        """
+        analyses.append(html_block)
 
-    mail_body = "\n\n".join(analyses) if analyses else "Aucune offre trouvée."
+    mail_body = "".join(analyses) if analyses else "<p>Aucune offre détectée aujourd’hui.</p>"
     send_email(
-        subject="Rapport BOAMP quotidien",
+        subject="🗂️ Rapport BOAMP quotidien",
         body=mail_body,
         to_email=TO_EMAIL,
         from_email=GMAIL_EMAIL,
         app_password=GMAIL_APP_PASSWORD
     )
-    print("Mail envoyé avec succès.")
+    print("✅ Mail envoyé avec succès.")
 
-schedule.every().day.at("07:00").do(daily_boamp_mail)
-
-if __name__ == "__main__":
-    print("Agent BOAMP veille démarré...")
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
-from fastapi import FastAPI
-import threading
-
+# --- API + SCHEDULER ---
 app = FastAPI()
 
 @app.get("/")
 def read_root():
-    return {"status": "MARCH.IA tourne en tâche de fond"}
+    return {"status": "MARCHIA BOAMP veille opérationnelle"}
 
 def run_scheduler():
-    print("Agent BOAMP veille démarré...")
+    print("⏰ Scheduler lancé – tâche planifiée à 07:00")
     schedule.every().day.at("07:00").do(daily_boamp_mail)
     while True:
         schedule.run_pending()
         time.sleep(60)
 
-# Lancer le scheduler dans un thread séparé
+# Lancer le scheduler dans un thread parallèle
 threading.Thread(target=run_scheduler, daemon=True).start()
-import uvicorn
 
 if __name__ == "__main__":
-    print("Lancement serveur FastAPI + tâche BOAMP")
-    threading.Thread(target=run_scheduler, daemon=True).start()
+    print("🚀 Lancement serveur FastAPI + BOAMP Watchdog")
     uvicorn.run(app, host="0.0.0.0", port=10000)
