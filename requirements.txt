@@ -1,6 +1,5 @@
-feedparser
-openai
-schedule
-fastapi
-uvicorn
-
+feedparser==6.0.10
+openai==1.10.0
+schedule==1.2.1
+fastapi==0.111.0
+uvicorn==0.29.0
