@@ -30,3 +30,4 @@ jobs:
           name: boamp-veille
           path: out/
           if-no-files-found: warn
+
