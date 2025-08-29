@@ -22,16 +22,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install openai msal
 
-      - name: Run PowerShell script
-        shell: pwsh
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          MAIL_FROM: ${{ secrets.MAIL_FROM }}     # ⚠ doit être une boîte du tenant Entra ID
-          MAIL_TO: ${{ secrets.MAIL_TO }}         # ex: "a@b.fr;c@d.fr"
-        run: |
+    - name: Run PowerShell script
+  shell: pwsh
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+    AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+    AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+    MAIL_FROM: ${{ secrets.MAIL_FROM }}
+    MAIL_TO: ${{ secrets.MAIL_TO }}
+  run: ./marchia-boamp.ps1 -Days 1 -IncludeJOUE
+
           pwsh -c './marchia-boamp.ps1 -Days 1 -IncludeJOUE'
 
       - name: Upload artifacts (CSV/JSON)
