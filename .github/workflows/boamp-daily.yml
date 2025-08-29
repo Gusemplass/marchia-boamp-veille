@@ -18,12 +18,12 @@ jobs:
       - name: Run PowerShell script
         shell: pwsh
         env:
-          OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
-          AZURE_TENANT_ID:    ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID:    ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET:${{ secrets.AZURE_CLIENT_SECRET }}
-          FROM_ADDRESS:       ${{ secrets.FROM_ADDRESS }}
-          TO_EMAILS:          ${{ secrets.TO_EMAILS }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  FROM_ADDRESS: ${{ secrets.FROM_ADDRESS }}
+  TO_EMAILS: ${{ secrets.TO_EMAILS }}
         run: ./marchia-boamp.ps1
       - name: Upload artifacts (CSV/JSON)
         uses: actions/upload-artifact@v4
