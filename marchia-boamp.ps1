@@ -1,0 +1,44 @@
+name: BOAMP Daily
+
+on:
+  schedule:
+    - cron: "30 5 * * *"   # 05:30 UTC = 07:30 Paris (été)
+  workflow_dispatch: {}
+
+jobs:
+  run-veille:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install openai msal
+
+      - name: Debug repo tree
+        run: ls -R
+
+      - name: Run PowerShell script
+        shell: pwsh
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: pwsh ./marchia-boamp.ps1 -Days 1 -IncludeJOUE
+
+      - name: Upload artifacts (CSV/JSON)
+        uses: actions/upload-artifact@v4
+        with:
+          name: boamp-veille
+          path: out/
+          if-no-files-found: warn
