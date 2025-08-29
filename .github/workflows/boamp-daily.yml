@@ -25,6 +25,15 @@ jobs:
       - name: Debug repo tree
         run: ls -R
 
+      - name: Sanity check PS1 is not YAML
+        shell: bash
+        run: |
+          head -n 8 marchia-boamp.ps1 || true
+          if grep -q "cron:" marchia-boamp.ps1; then
+            echo "FATAL: marchia-boamp.ps1 contient du YAML (cron:)."
+            exit 1
+          fi
+
       - name: Run PowerShell script
         shell: pwsh
         env:
