@@ -1,20 +1,27 @@
 name: BOAMP Daily
+
 on:
   schedule:
-    - cron: '30 5 * * *'  # 07:30 Europe/Paris
-  workflow_dispatch:
+    - cron: "30 5 * * *"   # 05:30 UTC = 07:30 Paris (été)
+  workflow_dispatch: {}
+
 jobs:
   run-veille:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
+
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
           pip install openai msal
+
       - name: Run PowerShell script
         shell: pwsh
         env:
@@ -22,12 +29,14 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          FROM_ADDRESS: ${{ secrets.FROM_ADDRESS }}
-          TO_EMAILS: ${{ secrets.TO_EMAILS }}
-        run: ./marchia-boamp.ps1
-      - uses: actions/upload-artifact@v4
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}     # ⚠ doit être une boîte du tenant Entra ID
+          MAIL_TO: ${{ secrets.MAIL_TO }}         # ex: "a@b.fr;c@d.fr"
+        run: |
+          pwsh -c './marchia-boamp.ps1 -Days 1 -IncludeJOUE'
+
+      - name: Upload artifacts (CSV/JSON)
+        uses: actions/upload-artifact@v4
         with:
           name: boamp-veille
           path: out/
           if-no-files-found: warn
-
