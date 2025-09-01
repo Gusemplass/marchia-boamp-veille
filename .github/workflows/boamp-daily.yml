@@ -12,48 +12,112 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show environment
-        run: |
-          pwsh -v
-          echo "Runner pwd:"
-          pwd
-          echo "Repo tree:"
-          ls -la
-          echo "PS default shell: $SHELL"
-
-      - name: Show script header (sanity)
-        run: |
-          echo "==== marchia-boamp.ps1 (head) ===="
-          sed -n '1,120p' marchia-boamp.ps1 || true
-
-      - name: Validate datasets URLs in script
+      # 🔧 (Re)construit un script PS5.1 PROPRE avec endpoints ODS corrects
+      - name: Rebuild marchia-boamp.ps1
         shell: bash
         run: |
-          grep -q "boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records" marchia-boamp.ps1
-          grep -q "boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/joue/records"  marchia-boamp.ps1
-          echo "Datasets URLs found ✅"
+          set -e
+          cat > marchia-boamp.ps1 <<'PS1'
+          <# BOAMP VEILLE — MINI STABLE (PS 5.1) #>
+          param([int]$Days=1,[switch]$IncludeJOUE,[int]$MaxPages=5,[int]$PageSize=100)
+          $ErrorActionPreference='Stop'
+          $BaseDir = (Get-Location).Path
+          $OutDir  = Join-Path $BaseDir 'out'; New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+          $DATASETS = @{
+            boamp = 'https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records'
+            joue  = 'https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/joue/records'
+          }
+          $UA='lucidia-boamp-veille/ps51'
+          function Join-Query { param([string[]]$Keywords,[string[]]$Zones)
+            $q=[System.Collections.Generic.List[string]]::new()
+            foreach($k in $Keywords){ $q.Add($k) }
+            foreach($k in $Keywords){ foreach($z in $Zones){ $q.Add("$k $z") } }
+            return $q
+          }
+          function Invoke-OdsRecords {
+            param([string]$BaseUrl,[hashtable]$Params,[int]$MaxRetries=3)
+            if ([string]::IsNullOrWhiteSpace($BaseUrl)) { throw "Invoke-OdsRecords: BaseUrl is null/empty." }
+            if ($BaseUrl -notmatch '^https?://') { throw "Invoke-OdsRecords: BaseUrl is not http(s): $BaseUrl" }
+            $pairs=@(); foreach($kv in $Params.GetEnumerator()){ $pairs+=("{0}={1}" -f $kv.Key,[uri]::EscapeDataString([string]$kv.Value)) }
+            $qs=($pairs -join '&'); $base=$BaseUrl.TrimEnd('&','?',' ')
+            $uri = if ($qs) { "$base`?$qs" } else { $base }
+            $headers=@{ 'User-Agent'=$UA; 'Accept'='application/json'; 'Referer'='https://boamp-datadila.opendatasoft.com/explore/'; 'Cache-Control'='no-cache' }
+            $try=0
+            while($true){
+              try { return Invoke-RestMethod -Uri $uri -Headers $headers -Method Get -TimeoutSec 45 }
+              catch { $try++; $code=$null; try{ $code=$_.Exception.Response.StatusCode.Value__ }catch{}; if ($code -in @(403,429) -and $try -lt $MaxRetries){ Start-Sleep -Seconds (2*$try); continue } ; throw }
+            }
+          }
+          function Scan {
+            param([ValidateSet('boamp','joue')][string]$Source,[int]$Days,[int]$PageSize,[int]$MaxPages,[string[]]$Keywords,[string[]]$Zones)
+            $base=$DATASETS[$Source]; if(-not $base){ throw "Scan: invalid dataset source '$Source'." }
+            $cutoff=(Get-Date).ToUniversalTime().AddDays(-$Days)
+            $isoUtc=$cutoff.ToString('yyyy-MM-ddTHH:mm:ssZ')
+            $queries=Join-Query -Keywords $Keywords -Zones $Zones
+            $seen=[System.Collections.Generic.HashSet[string]]::new()
+            $out=[System.Collections.Generic.List[object]]::new()
+            foreach($q in $queries){
+              if([string]::IsNullOrWhiteSpace($q)){ continue }
+              $offset=0; $page=0
+              while($page -lt $MaxPages){
+                $where='record_timestamp >= "'+$isoUtc+'"'
+                $resp=Invoke-OdsRecords -BaseUrl $base -Params @{ limit=$PageSize; offset=$offset; order_by='-record_timestamp'; q=$q; where=$where }
+                $recs=$resp.results; if(-not $recs -or $recs.Count -eq 0){ break }
+                foreach($rec in $recs){
+                  $rid=$rec.recordid; if([string]::IsNullOrWhiteSpace($rid)){ continue }
+                  if($seen.Contains($rid)){ continue }
+                  $ts=$rec.record_timestamp; if($ts){ try{ if([datetime]::Parse($ts).ToUniversalTime() -lt $cutoff){ continue } } catch{} }
+                  $null=$seen.Add($rid)
+                  $f=$rec.fields
+                  function Pick([object]$d,[string[]]$names){ foreach($n in $names){ if($d.$n){ return $d.$n } } return $null }
+                  $out.Add([pscustomobject]@{
+                    source=$Source; recordid=$rid; record_timestamp=$rec.record_timestamp
+                    publication_date=Pick $f @('dateparution','date_publication','publication_date')
+                    deadline=Pick $f @('date_limite','date_limite_reception_offres','date_reponse')
+                    title=Pick $f @('intitule_avis','objet','titre','objet_du_marche','title')
+                    buyer=Pick $f @('organisme','acheteur','maitre_ouvrage','acheteur_nom')
+                    procedure=Pick $f @('procedure','type_procedure')
+                    nature=Pick $f @('nature','type_avis')
+                    cpv=Pick $f @('code_cpv','cpv','cpv_principal')
+                    department_or_place=Pick $f @('code_departement','departement','lieu_execution','lieux_execution')
+                    url=Pick $f @('url_avis','url','lien','link')
+                    _q=$q
+                  })
+                }
+                if($recs.Count -lt $PageSize){ break }
+                $offset+=$PageSize; $page++
+              }
+            }
+            return $out
+          }
+          $KEYWORDS=@('menuiserie','volet','fenetre','fenêtre','porte','garde-corps','persienne','store','PVC','aluminium','bois')
+          $ZONES=@('Marseille','Toulon','Aix-en-Provence','Avignon','Cannes','Saint-Étienne','Var','Bouches-du-Rhône','Vaucluse','Alpes-Maritimes','Rhône')
+          $rows=@()
+          $rows+=Scan -Source 'boamp' -Days $Days -PageSize $PageSize -MaxPages $MaxPages -Keywords $KEYWORDS -Zones $ZONES
+          if ($IncludeJOUE){ $rows+=Scan -Source 'joue' -Days $Days -PageSize $PageSize -MaxPages $MaxPages -Keywords $KEYWORDS -Zones $ZONES }
+          $ht=@{}; foreach($r in $rows){ $k="$($r.recordid)|$($r.title)"; if(-not $ht.ContainsKey($k)){ $ht[$k]=$r } }
+          $dedup=$ht.Values
+          $ts=Get-Date -Format 'yyyy-MM-dd'
+          $csv=Join-Path $OutDir ("boamp_veille_{0}.csv" -f $ts)
+          $json=Join-Path $OutDir ("boamp_veille_{0}.json" -f $ts)
+          $cols='source','recordid','record_timestamp','publication_date','deadline','title','buyer','procedure','nature','cpv','department_or_place','url','_q'
+          $dedup | Select-Object $cols | Export-Csv -NoTypeInformation -Encoding UTF8 -Delimiter ',' -Path $csv
+          $dedup | ConvertTo-Json -Depth 8 | Out-File -Encoding UTF8 $json
+          Write-Host ("OK - rows={0} -> {1} ; {2}" -f $dedup.Count,$csv,$json)
+          PS1
+          chmod +x marchia-boamp.ps1
+          head -n 60 marchia-boamp.ps1
 
-      - name: Preflight ODS ping (network/DNS)
+      - name: Preflight ODS ping
         shell: bash
         run: |
           set -e
           curl -sSf "https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?limit=1" >/dev/null
           curl -sSf "https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/joue/records?limit=1"  >/dev/null
-          echo "ODS reachable ✅"
 
       - name: Run PowerShell script
         shell: pwsh
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          MAIL_FROM: ${{ secrets.MAIL_FROM }}
-          MAIL_TO: ${{ secrets.MAIL_TO }}
-        run: |
-          # Exécute depuis la racine
-          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
-          ./marchia-boamp.ps1 -Days 1 -IncludeJOUE
+        run: ./marchia-boamp.ps1 -Days 1 -IncludeJOUE
 
       - name: Upload artifacts (CSV/JSON)
         uses: actions/upload-artifact@v4
